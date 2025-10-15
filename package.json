@@ -1,22 +1,62 @@
 {
   "name": "virtual-multi-entry-plugin",
   "version": "0.0.1",
+  "description": "A Vite plugin that enables multiple virtual entry points for your build process",
+  "keywords": [
+    "vite",
+    "plugin",
+    "multi-entry",
+    "virtual",
+    "rollup",
+    "build",
+    "bundler",
+    "typescript"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/virtual-multi-entry.plugin.cjs",
+  "module": "./dist/virtual-multi-entry.plugin.js",
+  "types": "./dist/virtual-multi-entry.plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/virtual-multi-entry.plugin.d.ts",
+      "import": "./dist/virtual-multi-entry.plugin.js",
+      "require": "./dist/virtual-multi-entry.plugin.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/virtual-multi-entry-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/virtual-multi-entry-plugin/issues"
+  },
+  "homepage": "https://github.com/yourusername/virtual-multi-entry-plugin#readme",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "prepublishOnly": "npm run build",
     "test:vitest": "vitest",
     "test:vitest:ui": "vitest --ui",
     "test:vitest:run": "vitest run",
     "test:vitest:coverage": "vitest run --coverage"
   },
-  "devDependencies": {
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0",
     "@types/node": "^24.7.2",
     "@vitest/coverage-v8": "3.2.4",
     "jsdom": "^27.0.0",
     "typescript": "~5.9.3",
-    "vite": "^7.1.10",
     "vitest": "^3.2.4"
   }
 }
