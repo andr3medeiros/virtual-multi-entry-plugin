@@ -1,6 +1,6 @@
 {
   "name": "virtual-multi-entry-plugin",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Vite plugin that enables multiple virtual entry points for your build process",
   "keywords": [
     "vite",
@@ -12,7 +12,7 @@
     "bundler",
     "typescript"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "André Medeiros <andr3medeiros@gmail.com>",
   "license": "MIT",
   "type": "module",
   "main": "./dist/virtual-multi-entry.plugin.cjs",
@@ -32,12 +32,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/virtual-multi-entry-plugin.git"
+    "url": "https://github.com/andr3medeiros/virtual-multi-entry-plugin.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/virtual-multi-entry-plugin/issues"
+    "url": "https://github.com/andr3medeiros/virtual-multi-entry-plugin/issues"
   },
-  "homepage": "https://github.com/yourusername/virtual-multi-entry-plugin#readme",
+  "homepage": "https://github.com/andr3medeiros/virtual-multi-entry-plugin#readme",
   "engines": {
     "node": ">=20.19.0"
   },
