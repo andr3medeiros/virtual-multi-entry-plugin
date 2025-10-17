@@ -9,9 +9,8 @@ export default defineConfig({
 		},
 	},
 	plugins: [virtualMultiEntryPlugin({
-		entries: {
-			files: ['./src/__tests__/mock/api.js', './src/__tests__/mock/styles.css'],
-			type: 'lib',
-		},
+		name: 'api',
+		files: ['./src/__tests__/mock/api.js', './src/__tests__/mock/styles.css'],
+		type: 'lib',
 	})],
 });

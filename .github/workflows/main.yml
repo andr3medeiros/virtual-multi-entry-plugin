@@ -19,6 +19,6 @@ jobs:
           corepack up
           corepack yarn install
           corepack yarn test
-          npm publish --provenance --access public
+          npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
