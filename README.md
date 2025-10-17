@@ -38,15 +38,13 @@ import { virtualMultiEntryPlugin } from 'virtual-multi-entry-plugin';
 export default defineConfig({
   plugins: [
     virtualMultiEntryPlugin({
-      entries: {
-        'main': {
-          files: ['./src/main.js', './src/styles.css'],
-          type: 'app'
-        },
-        'admin': {
-          files: ['./src/admin.js', './src/admin.css'],
-          type: 'app'
-        }
+      'main': {
+        files: ['./src/main.js', './src/styles.css'],
+        type: 'app'
+      },
+      'admin': {
+        files: ['./src/admin.js', './src/admin.css'],
+        type: 'app'
       }
     })
   ]
@@ -68,12 +66,9 @@ export default defineConfig({
   },
   plugins: [
     virtualMultiEntryPlugin({
-      entries: {
-        'my-lib': {
-          files: ['./src/api.js', './src/styles.css'],
-          type: 'lib'
-        }
-      }
+      name: 'my-lib',
+      files: ['./src/api.js', './src/styles.css'],
+      type: 'lib'
     })
   ]
 });
@@ -88,12 +83,11 @@ import { virtualMultiEntryPlugin } from 'virtual-multi-entry-plugin';
 export default defineConfig({
   plugins: [
     virtualMultiEntryPlugin({
-      entries: {
-        'styles': {
-          files: ['./src/styles.css', './src/utilities.css'],
-          type: 'app'
-        }
-      },
+      'styles': {
+        files: ['./src/styles.css', './src/utilities.css'],
+        type: 'app'
+      }
+    }, {
       enforce: true // Ensures CSS entries are included even if imports are shared
     })
   ]
@@ -108,7 +102,9 @@ Creates Vite plugins for handling multiple virtual entry points.
 
 #### Parameters
 
-- **`entries`** (`Record<string, MultiEntryOption>`): A record mapping entry names to their configuration
+- **`entries`** (`AppEntryOption` | `LibEntryOption`): 
+  - For **app mode**: A record mapping entry names to their configuration (each entry must have `type: 'app'`)
+  - For **lib mode**: A single library entry configuration with `type: 'lib'`
 - **`options`** (`Options?`): Optional plugin configuration
 
 #### `MultiEntryOption`
@@ -117,6 +113,24 @@ Creates Vite plugins for handling multiple virtual entry points.
 interface MultiEntryOption {
   files: string[];           // Array of file paths to include in the entry
   type?: 'app' | 'lib';      // Entry type: 'app' for application builds, 'lib' for library builds
+}
+```
+
+#### `AppEntryOption`
+
+```typescript
+type AppEntryOption = Record<string, MultiEntryOption & {
+  type: 'app';               // Must be 'app' for application builds
+}>;
+```
+
+#### `LibEntryOption`
+
+```typescript
+interface LibEntryOption {
+  name: string;              // Name of the library entry
+  files: string[];           // Array of file paths to include in the entry
+  type: 'lib';               // Must be 'lib' for library builds
 }
 ```
 
@@ -131,15 +145,18 @@ interface Options {
 ## Entry Types
 
 ### App Mode (`type: 'app'`)
-- Creates standard application entry points
-- Files are imported directly
-- Output files follow standard Vite naming conventions
+- **Usage**: Pass a record of multiple entries, each with `type: 'app'`
+- **Behavior**: Creates standard application entry points
+- **Files**: Files are imported directly
+- **Output**: Output files follow standard Vite naming conventions
+- **Example**: `{ 'main': { files: [...], type: 'app' }, 'admin': { files: [...], type: 'app' } }`
 
 ### Library Mode (`type: 'lib'`)
-- Creates library entry points
-- Files are re-exported as named exports
-- Supports default export if library name is configured
-- Output files are named exactly as specified
+- **Usage**: Pass a single entry object with `type: 'lib'` and a `name` property
+- **Behavior**: Creates library entry points
+- **Files**: Files are re-exported as named exports
+- **Output**: Supports default export if library name is configured, output files are named exactly as specified
+- **Example**: `{ name: 'my-lib', files: [...], type: 'lib' }`
 
 ## CSS-Only Entries
 
@@ -155,42 +172,45 @@ The plugin automatically detects CSS-only entries (when all files in an entry ha
 
 ```typescript
 virtualMultiEntryPlugin({
-  entries: {
-    'homepage': {
-      files: ['./src/pages/home.js', './src/pages/home.css'],
-      type: 'app'
-    },
-    'dashboard': {
-      files: ['./src/pages/dashboard.js', './src/pages/dashboard.css'],
-      type: 'app'
-    },
-    'admin': {
-      files: ['./src/pages/admin.js', './src/pages/admin.css'],
-      type: 'app'
-    }
+  'homepage': {
+    files: ['./src/pages/home.js', './src/pages/home.css'],
+    type: 'app'
+  },
+  'dashboard': {
+    files: ['./src/pages/dashboard.js', './src/pages/dashboard.css'],
+    type: 'app'
+  },
+  'admin': {
+    files: ['./src/pages/admin.js', './src/pages/admin.css'],
+    type: 'app'
   }
 })
 ```
 
-### Mixed Entry Types
+### Multiple App Entries with Options
 
 ```typescript
 virtualMultiEntryPlugin({
-  entries: {
-    'app': {
-      files: ['./src/app.js', './src/app.css'],
-      type: 'app'
-    },
-    'library': {
-      files: ['./src/lib.js', './src/lib.css'],
-      type: 'lib'
-    },
-    'styles-only': {
-      files: ['./src/global.css', './src/components.css'],
-      type: 'app'
-    }
+  'app': {
+    files: ['./src/app.js', './src/app.css'],
+    type: 'app'
   },
+  'styles-only': {
+    files: ['./src/global.css', './src/components.css'],
+    type: 'app'
+  }
+}, {
   enforce: true
+})
+```
+
+### Library Entry
+
+```typescript
+virtualMultiEntryPlugin({
+  name: 'my-library',
+  files: ['./src/lib.js', './src/lib.css'],
+  type: 'lib'
 })
 ```
 
