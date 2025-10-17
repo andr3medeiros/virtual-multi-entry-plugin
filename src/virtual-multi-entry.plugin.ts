@@ -1,3 +1,4 @@
+import console from 'console';
 import path from 'path';
 import type { Plugin } from 'vite';
 
@@ -13,12 +14,24 @@ export interface MultiEntryOption {
 	files: string[];
 	type?: 'app' | 'lib';
 }
+export type AppEntryOption = Record<string, MultiEntryOption & {
+	type: 'app';
+}>;
+
+export type LibEntryOption = MultiEntryOption & {
+	name: string;
+	type: 'lib';
+}
 
 const buildFileName = (name: string, isCssOnly: boolean): string => {
 	return `${name}.${isCssOnly ? 'css' : 'js'}`;
 };
 
 export const wrapInVirtualEntry = (entry: string) => `virtual:${entry}` as const;
+
+const isLibEntry = (entries: LibEntryOption | AppEntryOption): entries is LibEntryOption => {
+	return entries.type === 'lib';
+};
 
 /**
  * Vite plugin to handle multiple virtual entry points.
@@ -35,11 +48,21 @@ export const wrapInVirtualEntry = (entry: string) => `virtual:${entry}` as const
  *
  * @returns {Plugin[]} Returns an array of Vite plugins (one per entry).
  */
-export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption>, pluginOptions?: Options): Plugin[] {
+export function virtualMultiEntryPlugin<Entries extends LibEntryOption | AppEntryOption>(entries: Entries, pluginOptions?: Options): Plugin[] {
 	const importMap = new Map<string, string>(); // key: import block, value: entry name
 	const duplicatedSources = new Map<string, string>(); // key: entry name, value: original entry name
 
-	return Object.entries(entries).map<Plugin>(([name, options]) => {
+	let processedEntries: Record<string, MultiEntryOption> = {};
+
+	if (isLibEntry(entries)) {
+		processedEntries = {
+			[entries.name]: entries,
+		};
+	} else {
+		processedEntries = entries;
+	}
+
+	return Object.entries(processedEntries).map<Plugin>(([name, options]) => {
 		console.debug(`Adding virtual multi-entry plugin for: ${name}`);
 
 		const isCssOnly = options.files.every(file => file.endsWith('.css'));
@@ -75,6 +98,7 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 					build.lib = {
 						...build.lib,
 						entry: virtualEntryId,
+						name: name,
 					};
 
 					rollupOptions.input = {
@@ -94,9 +118,13 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 								: oldEntryFileNames || '[name].[hash].chunk.js';
 						};
 					}
+
+					console.debug('build:', build);
 				} else {
 					const input = (rollupOptions.input = rollupOptions.input ?? {}) as Record<string, string>;
 					input[name] = virtualEntryId;
+
+					console.debug('Input:', input);
 
 					if (!Array.isArray(output)) {
 						// For CSS-only entries, ensure output name matches input
@@ -122,28 +150,30 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 			 */
 			resolveId(id) {
 				if (options.type === 'lib' && id.endsWith(virtualEntryId)) {
+					console.debug(`Resolving virtual entry ID for lib: ${name}`);
+
 					return virtualResolvedEntryId;
 				}
+
 				if (virtualEntryId === id) {
+					console.debug(`Resolving virtual entry ID for: ${name}`);
+					
 					return virtualResolvedEntryId;
 				}
+				
 				return null;
 			},
-
-			/**
-			 * Debugging aid: log when each chunk renders.
-			 */
-			renderChunk(_, chunk) {
-				console.debug(`Rendering chunk: ${chunk.fileName} for ${name}`);
-			},
-
 			/**
 			 * Debugging aid: log when the virtual entry is transformed.
 			 */
 			transform(_, id) {
+				console.debug(`Virtual resolved entry ID:`, id);
+
+
 				if (id === virtualResolvedEntryId) {
 					console.debug(`Transforming virtual entry for: ${name}`);
 				}
+
 				return null;
 			},
 
@@ -155,6 +185,8 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 			 */
 			load(id) {
 				if (id === virtualResolvedEntryId) {
+					console.debug(`Loading virtual entry for: ${name}`);
+					
 					let libFooter = '';
 
 					// If in 'lib' mode and the lib has a name, add a default export
@@ -185,6 +217,8 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 
 					importer = header + importer;
 
+					console.debug(`Importer for: ${name}`, importer);
+
 					// Used to detect duplicated CSS content blocks among entries
 					const key = Buffer.from(importer).toString('base64');
 					const existingImport = importMap.get(key);
@@ -193,6 +227,8 @@ export function virtualMultiEntryPlugin(entries: Record<string, MultiEntryOption
 					} else {
 						importMap.set(key, name);
 					}
+
+					console.debug(`Import map:`, importMap);
 
 					return importer;
 				}

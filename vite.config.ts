@@ -11,14 +11,6 @@ export default defineConfig({
     },
     rollupOptions: {
       external: ['vite', 'path'],
-      output: {
-        globals: {
-          vite: 'Vite',
-          path: 'path'
-        }
-      }
     },
-    sourcemap: true,
-    minify: false
   }
 });

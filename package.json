@@ -1,6 +1,6 @@
 {
   "name": "virtual-multi-entry-plugin",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "A Vite plugin that enables multiple virtual entry points for your build process",
   "keywords": [
     "vite",
@@ -43,20 +43,23 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build -- $0 && tsc -p tsconfig.build.json",
     "preview": "vite preview",
     "prepublishOnly": "npm run build",
-    "test:vitest": "vitest",
-    "test:vitest:ui": "vitest --ui",
-    "test:vitest:run": "vitest run",
-    "test:vitest:coverage": "vitest run --coverage"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
-  "peerDependencies": {
-    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0",
+  "devDependencies": {
     "@types/node": "^24.7.2",
     "@vitest/coverage-v8": "3.2.4",
     "jsdom": "^27.0.0",
     "typescript": "~5.9.3",
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0",
     "vitest": "^3.2.4"
-  }
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "packageManager": "yarn@4.10.3+sha256.cd71753d68307301d21034efaf20bd8eee81f9450af75f068477bf9011bb9ad4"
 }

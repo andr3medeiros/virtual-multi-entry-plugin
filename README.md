@@ -11,6 +11,12 @@ A Vite plugin that enables multiple virtual entry points for your build process.
 - 🏷️ **Unique Output Names**: Ensures unique output filenames per entry
 - 🔧 **TypeScript Support**: Full TypeScript support with type definitions
 
+## Related Plugins
+
+This plugin works great in conjunction with other Vite plugins:
+
+- **[vite-virtual-entry-server-plugin](https://www.npmjs.com/package/vite-virtual-entry-server-plugin)** - A complementary plugin that provides server-side rendering support for virtual entry points. Use it alongside this plugin when you need SSR capabilities for your multi-entry applications.
+
 ## Installation
 
 ```bash

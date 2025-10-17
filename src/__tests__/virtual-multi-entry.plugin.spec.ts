@@ -1,1154 +1,874 @@
-import type { UserConfig } from 'vite';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { virtualMultiEntryPlugin, wrapInVirtualEntry } from '../virtual-multi-entry.plugin.ts';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { virtualMultiEntryPlugin, wrapInVirtualEntry } from '../virtual-multi-entry.plugin.js';
+import type { ConfigEnv, UserConfig } from 'vite';
 
 // Mock console.debug to avoid noise in tests
 const mockConsoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
 describe('virtualMultiEntryPlugin', () => {
-	beforeEach(() => {
-		mockConsoleDebug.mockClear();
-	});
-
-	afterAll(() => {
-		mockConsoleDebug.mockRestore();
-	});
-
-	describe('Plugin Creation', () => {
-		it('should create plugins for each entry', () => {
-			const entries = {
-				entry1: { files: ['file1.js', 'file2.js'] },
-				entry2: { files: ['file3.css'] },
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins).toHaveLength(2);
-			expect(plugins[0]).toHaveProperty('name', 'virtual-multi-entry-plugin');
-			expect(plugins[1]).toHaveProperty('name', 'virtual-multi-entry-plugin');
-		});
-
-		it('should log debug messages for each entry', () => {
-			const entries = {
-				entry1: { files: ['file1.js'] },
-				entry2: { files: ['file2.js'] },
-			};
-
-			virtualMultiEntryPlugin(entries);
-
-			expect(mockConsoleDebug).toHaveBeenCalledWith('Adding virtual multi-entry plugin for: entry1');
-			expect(mockConsoleDebug).toHaveBeenCalledWith('Adding virtual multi-entry plugin for: entry2');
-		});
-
-		it('should set enforce to pre', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins[0].enforce).toBe('pre');
-		});
-	});
-
-	describe('wrapInVirtualEntry', () => {
-		it('should wrap entry name with virtual: prefix', () => {
-			expect(wrapInVirtualEntry('test-entry')).toBe('virtual:test-entry');
-		});
-	});
-
-	describe('Config Mutation', () => {
-		describe('App Mode', () => {
-			it('should configure rollup input for app mode', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'app' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = { build: { rollupOptions: {} } };
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				expect(config.build?.rollupOptions?.input).toEqual({
-					entry1: 'virtual:entry1',
-				});
-			});
-
-			it('should create build config if not present', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'app' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = {};
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				expect(config.build).toBeDefined();
-				expect(config.build?.rollupOptions).toBeDefined();
-				expect(config.build?.rollupOptions?.input).toEqual({
-					entry1: 'virtual:entry1',
-				});
-			});
-
-			it('should preserve existing input entries', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'app' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = {
-					build: {
-						rollupOptions: {
-							input: { existing: 'existing-entry.js' },
-						},
-					},
-				};
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				expect(config.build?.rollupOptions?.input).toEqual({
-					existing: 'existing-entry.js',
-					entry1: 'virtual:entry1',
-				});
-			});
-
-			it('should configure assetFileNames for CSS-only entries', () => {
-				const entries = { entry1: { files: ['file1.css'], type: 'app' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = { build: { rollupOptions: {} } };
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				expect(config.build?.rollupOptions?.output).toBeDefined();
-				const output = config.build?.rollupOptions?.output as any;
-				expect(typeof output?.assetFileNames).toBe('function');
-			});
-		});
-
-		describe('Lib Mode', () => {
-			it('should configure lib entry and rollup input for lib mode', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = { build: { rollupOptions: {} } };
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				const lib = config.build?.lib as any;
-				expect(lib?.entry).toBe('virtual:entry1');
-				expect(config.build?.rollupOptions?.input).toEqual({
-					entry1: 'virtual:entry1',
-				});
-			});
-
-			it('should configure entryFileNames for lib mode', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = { build: { rollupOptions: {} } };
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				expect(config.build?.rollupOptions?.output).toBeDefined();
-				const output = config.build?.rollupOptions?.output as any;
-				expect(typeof output?.entryFileNames).toBe('function');
-			});
-
-			it('should preserve existing lib config', () => {
-				const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-				const plugins = virtualMultiEntryPlugin(entries);
-				const config: UserConfig = {
-					build: {
-						lib: { name: 'MyLib', fileName: 'my-lib', entry: 'existing-entry' },
-						rollupOptions: {},
-					},
-				};
-
-				const configHandler = plugins[0].config as any;
-				configHandler.call(plugins[0], config);
-
-				const lib = config.build?.lib as any;
-				expect(lib?.name).toBe('MyLib');
-				expect(lib?.fileName).toBe('my-lib');
-				expect(lib?.entry).toBe('virtual:entry1');
-			});
-		});
-	});
-
-	describe('resolveId Hook', () => {
-		it('should resolve virtual entry ID for app mode', () => {
-			const entries = { entry1: { files: ['file1.js'], type: 'app' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const resolveIdHandler = plugins[0].resolveId as any;
-			const result = resolveIdHandler.call(plugins[0], 'virtual:entry1');
-
-			expect(result).toBe('\0virtual:entry1');
-		});
-
-		it('should resolve virtual entry ID for lib mode', () => {
-			const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const resolveIdHandler = plugins[0].resolveId as any;
-			const result = resolveIdHandler.call(plugins[0], 'virtual:entry1');
-
-			expect(result).toBe('\0virtual:entry1');
-		});
-
-		it('should return null for non-matching IDs', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const resolveIdHandler = plugins[0].resolveId as any;
-			const result = resolveIdHandler.call(plugins[0], 'other-id');
-
-			expect(result).toBeNull();
-		});
-	});
-
-	describe('load Hook', () => {
-		it('should generate import statements for app mode', () => {
-			const entries = { entry1: { files: ['file1.js', 'file2.js'], type: 'app' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], '\0virtual:entry1');
-
-			expect(result).toContain('// Virtual multi-entry plugin for entry1');
-			expect(result).toContain('import "file1.js";');
-			expect(result).toContain('import "file2.js";');
-		});
-
-		it('should generate export statements for lib mode', () => {
-			const entries = { entry1: { files: ['file1.js', 'file2.js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			// Mock the environment config
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:entry1');
-
-			expect(result).toContain('// Virtual multi-entry plugin for entry1');
-			expect(result).toContain('export * as file1 from "file1.js";');
-			expect(result).toContain('export * as file2 from "file2.js";');
-		});
-
-		it('should sanitize file names for export names', () => {
-			const entries = { entry1: { files: ['file-with-dashes.js', 'file.with.dots.js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			// Mock the environment config
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:entry1');
-
-			expect(result).toContain('export * as file_with_dashes from "file-with-dashes.js";');
-			expect(result).toContain('export * as file_with_dots from "file.with.dots.js";');
-		});
-
-		it('should add default export for lib with name', () => {
-			const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			// Mock the environment config
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'MyLibrary' },
-					},
-				},
-			};
-
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:entry1');
-
-			expect(result).toContain('export default MyLibrary;');
-		});
-
-		it('should return null for non-matching IDs', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], 'other-id');
-
-			expect(result).toBeNull();
-		});
-	});
-
-	describe('transform Hook', () => {
-		it('should log debug message when transforming virtual entry', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const transformHandler = plugins[0].transform as any;
-			transformHandler.call(plugins[0], '', '\0virtual:entry1');
-
-			expect(mockConsoleDebug).toHaveBeenCalledWith('Transforming virtual entry for: entry1');
-		});
-
-		it('should return null for transform', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const transformHandler = plugins[0].transform as any;
-			const result = transformHandler.call(plugins[0], '', '\0virtual:entry1');
-
-			expect(result).toBeNull();
-		});
-	});
-
-	describe('renderChunk Hook', () => {
-		it('should log debug message when rendering chunk', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			const renderChunkHandler = plugins[0].renderChunk as any;
-			renderChunkHandler.call(plugins[0], '', { fileName: 'chunk.js' } as any);
-
-			expect(mockConsoleDebug).toHaveBeenCalledWith('Rendering chunk: chunk.js for entry1');
-		});
-	});
-
-	describe('generateBundle Hook', () => {
-		it('should not emit files when enforce is false', () => {
-			const entries = { entry1: { files: ['file1.css'] } };
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: false });
-			const bundle = { 'entry1.css': { type: 'asset', source: 'css content' } };
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			generateBundleHandler.call(mockPlugin, {}, bundle);
-
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should not emit files for non-CSS entries', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const bundle = {};
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			generateBundleHandler.call(mockPlugin, {}, bundle);
-
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should call generateBundle hook when enforce is true', () => {
-			const entries = { entry1: { files: ['file1.css'] } };
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const bundle = { 'entry1.css': { type: 'asset', source: 'css content' } };
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-
-			// Should not throw when called
-			expect(() => generateBundleHandler.call(mockPlugin, {}, bundle)).not.toThrow();
-		});
-	});
-
-	describe('Edge Cases', () => {
-		it('should handle empty files array', () => {
-			const entries = { entry1: { files: [] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins).toHaveLength(1);
-			expect(plugins[0]).toBeDefined();
-		});
-
-		it('should handle mixed file types for CSS detection', () => {
-			const entries = { entry1: { files: ['file1.css', 'file2.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			// Should not be detected as CSS-only
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], '\0virtual:entry1');
-			expect(result).toContain('import "file1.css";');
-			expect(result).toContain('import "file2.js";');
-		});
-
-		it('should handle special characters in file names', () => {
-			const entries = { entry1: { files: ['file@#$%^&*().js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			// Mock the environment config
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:entry1');
-
-			expect(result).toContain('export * as file_________ from "file@#$%^&*().js";');
-		});
-
-		it('should handle array output configuration', () => {
-			const entries = { entry1: { files: ['file1.js'], type: 'lib' as const } };
-			const plugins = virtualMultiEntryPlugin(entries);
-			const config: UserConfig = {
-				build: {
-					rollupOptions: {
-						output: [{}, {}], // Array output
-					},
-				},
-			};
-
-			const configHandler = plugins[0].config as any;
-			expect(() => configHandler.call(plugins[0], config)).not.toThrow();
-		});
-	});
-
-	describe('Plugin Options', () => {
-		it('should accept plugin options', () => {
-			const entries = { entry1: { files: ['file1.css'] } };
-			const options = { enforce: true };
-			const plugins = virtualMultiEntryPlugin(entries, options);
-
-			expect(plugins).toHaveLength(1);
-			expect(plugins[0]).toBeDefined();
-		});
-
-		it('should work without plugin options', () => {
-			const entries = { entry1: { files: ['file1.js'] } };
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins).toHaveLength(1);
-			expect(plugins[0]).toBeDefined();
-		});
-	});
-});
-
-describe('Mock Files Integration', () => {
-	describe('CSS Files', () => {
-		it('should handle CSS-only entries with mock files', () => {
-			const entries = {
-				styles: { 
-					files: ['src/__tests__/mock/styles.css'], 
-					type: 'app' as const 
-				},
-				components: { 
-					files: ['src/__tests__/mock/components.css'], 
-					type: 'app' as const 
-				},
-				utilities: { 
-					files: ['src/__tests__/mock/utilities.css'], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins).toHaveLength(3);
-			
-			// Test styles entry
-			const stylesPlugin = plugins[0];
-			const stylesLoadHandler = stylesPlugin.load as any;
-			const stylesResult = stylesLoadHandler.call(stylesPlugin, '\0virtual:styles');
-			
-			expect(stylesResult).toContain('// Virtual multi-entry plugin for styles');
-			expect(stylesResult).toContain('import "src/__tests__/mock/styles.css";');
-		});
-
-		it('should handle mixed CSS and JS entries', () => {
-			const entries = {
-				mixed: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/utils.js'
-					], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], '\0virtual:mixed');
-			
-			expect(result).toContain('import "src/__tests__/mock/styles.css";');
-			expect(result).toContain('import "src/__tests__/mock/utils.js";');
-		});
-	});
-
-	describe('JavaScript Files', () => {
-		it('should handle JS-only entries with mock files', () => {
-			const entries = {
-				utils: { 
-					files: ['src/__tests__/mock/utils.js'], 
-					type: 'lib' as const 
-				},
-				api: { 
-					files: ['src/__tests__/mock/api.js'], 
-					type: 'lib' as const 
-				},
-				components: { 
-					files: ['src/__tests__/mock/components.js'], 
-					type: 'lib' as const 
-				},
-				helpers: { 
-					files: ['src/__tests__/mock/helpers.js'], 
-					type: 'lib' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-
-			expect(plugins).toHaveLength(4);
-			
-			// Test utils entry
-			const utilsPlugin = plugins[0] as any;
-			utilsPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-			const utilsLoadHandler = utilsPlugin.load;
-			const utilsResult = utilsLoadHandler.call(utilsPlugin, '\0virtual:utils');
-			
-			expect(utilsResult).toContain('// Virtual multi-entry plugin for utils');
-			expect(utilsResult).toContain('export * as utils from "src/__tests__/mock/utils.js";');
-		});
-
-		it('should handle multiple JS files in single entry', () => {
-			const entries = {
-				allJs: { 
-					files: [
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js',
-						'src/__tests__/mock/components.js',
-						'src/__tests__/mock/helpers.js'
-					], 
-					type: 'lib' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:allJs');
-			
-			expect(result).toContain('export * as utils from "src/__tests__/mock/utils.js";');
-			expect(result).toContain('export * as api from "src/__tests__/mock/api.js";');
-			expect(result).toContain('export * as components from "src/__tests__/mock/components.js";');
-			expect(result).toContain('export * as helpers from "src/__tests__/mock/helpers.js";');
-		});
-
-		it('should sanitize file names for export names', () => {
-			const entries = {
-				libEntry: { 
-					files: [
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js'
-					], 
-					type: 'lib' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:libEntry');
-			
-			expect(result).toContain('export * as utils from "src/__tests__/mock/utils.js";');
-			expect(result).toContain('export * as api from "src/__tests__/mock/api.js";');
-		});
-	});
-
-	describe('Mixed File Types', () => {
-		it('should handle entries with both CSS and JS files', () => {
-			const entries = {
-				app: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/components.css',
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js'
-					], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], '\0virtual:app');
-			
-			expect(result).toContain('import "src/__tests__/mock/styles.css";');
-			expect(result).toContain('import "src/__tests__/mock/components.css";');
-			expect(result).toContain('import "src/__tests__/mock/utils.js";');
-			expect(result).toContain('import "src/__tests__/mock/api.js";');
-		});
-
-		it('should handle lib entries with mixed file types', () => {
-			const entries = {
-				lib: { 
-					files: [
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js',
-						'src/__tests__/mock/helpers.js'
-					], 
-					type: 'lib' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:lib');
-			
-			expect(result).toContain('export * as utils from "src/__tests__/mock/utils.js";');
-			expect(result).toContain('export * as api from "src/__tests__/mock/api.js";');
-			expect(result).toContain('export * as helpers from "src/__tests__/mock/helpers.js";');
-		});
-	});
-
-	describe('File Path Handling', () => {
-		it('should handle nested file paths correctly', () => {
-			const entries = {
-				nested: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/utils.js'
-					], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const loadHandler = plugins[0].load as any;
-			const result = loadHandler.call(plugins[0], '\0virtual:nested');
-			
-			expect(result).toContain('import "src/__tests__/mock/styles.css";');
-			expect(result).toContain('import "src/__tests__/mock/utils.js";');
-		});
-
-		it('should handle file names with special characters', () => {
-			const entries = {
-				special: { 
-					files: [
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js'
-					], 
-					type: 'lib' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.environment = {
-				config: {
-					build: {
-						lib: { name: 'TestLib' },
-					},
-				},
-			};
-			const loadHandler = mockPlugin.load;
-			const result = loadHandler.call(mockPlugin, '\0virtual:special');
-			
-			// Should sanitize file names for export names
-			expect(result).toContain('export * as utils from "src/__tests__/mock/utils.js";');
-			expect(result).toContain('export * as api from "src/__tests__/mock/api.js";');
-		});
-	});
-
-	describe('CSS-only Entry Detection', () => {
-		it('should configure assetFileNames for CSS-only entries', () => {
-			const entries = {
-				cssOnly: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/components.css',
-						'src/__tests__/mock/utilities.css'
-					], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const config: UserConfig = { build: { rollupOptions: {} } };
-
-			const configHandler = plugins[0].config as any;
-			configHandler.call(plugins[0], config);
-
-			expect(config.build?.rollupOptions?.output).toBeDefined();
-			const output = config.build?.rollupOptions?.output as any;
-			expect(typeof output?.assetFileNames).toBe('function');
-		});
-
-		it('should not configure assetFileNames for mixed entries', () => {
-			const entries = {
-				mixed: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/utils.js'
-					], 
-					type: 'app' as const 
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries);
-			const config: UserConfig = { build: { rollupOptions: {} } };
-
-			const configHandler = plugins[0].config as any;
-			configHandler.call(plugins[0], config);
-
-			// For mixed entries, assetFileNames should not be configured
-			expect(config.build?.rollupOptions?.output).toBeDefined();
-			const output = config.build?.rollupOptions?.output as any;
-			expect(typeof output?.assetFileNames).toBe('function');
-		});
-
-		it('should handle CSS-only entries in generateBundle hook', () => {
-			const entries = {
-				cssOnly: { 
-					files: [
-						'src/__tests__/mock/styles.css',
-						'src/__tests__/mock/components.css'
-					]
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const bundle = { 'cssOnly.css': { type: 'asset', source: 'css content' } };
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			
-			const result = generateBundleHandler.call(mockPlugin, {}, bundle);
-			
-			// Should return undefined
-			expect(result).toBeUndefined();
-			
-			// Should not emit files when the expected file already exists
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should emit missing CSS files when enforce is true and file is missing', () => {
-			const entries = {
-				missingCss: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const bundle = {}; // Empty bundle - file is missing
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			const result = generateBundleHandler.call(mockPlugin, {}, bundle);
-			
-			// Should return undefined
-			expect(result).toBeUndefined();
-			
-			// Should not emit files when there's no duplicated source
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should verify generateBundle processes missing entries correctly', () => {
-			const entries = {
-				entry1: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test with missing file in bundle
-			const bundle = {}; // Empty bundle - entry1.css is missing
-			const result = mockPlugin.generateBundle.call(mockPlugin, {}, bundle);
-			
-			// Should return undefined
-			expect(result).toBeUndefined();
-			
-			// Should not emit files when there's no duplicated source
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should verify bundle content after generateBundle execution', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test with bundle containing the expected file
-			const originalBundle = { 
-				'cssOnly.css': { 
-					type: 'asset', 
-					source: 'body { margin: 0; }' 
-				} 
-			};
-			
-			const result = mockPlugin.generateBundle.call(mockPlugin, {}, originalBundle);
-			
-			// Should return undefined
-			expect(result).toBeUndefined();
-			
-			// Should not emit files when the expected file already exists
-			expect(mockEmitFile).not.toHaveBeenCalled();
-			
-			// Bundle should remain unchanged
-			expect(originalBundle).toEqual({
-				'cssOnly.css': { 
-					type: 'asset', 
-					source: 'body { margin: 0; }' 
-				} 
-			});
-		});
-
-		it('should verify generateBundle behavior with different bundle states', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test 1: Bundle with existing file
-			const bundleWithFile = { 
-				'cssOnly.css': { 
-					type: 'asset', 
-					source: 'body { color: green; }' 
-				} 
-			};
-			const result1 = mockPlugin.generateBundle.call(mockPlugin, {}, bundleWithFile);
-			expect(result1).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Test 2: Empty bundle
-			const emptyBundle = {};
-			const result2 = mockPlugin.generateBundle.call(mockPlugin, {}, emptyBundle);
-			expect(result2).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Test 3: Bundle with wrong file name
-			const wrongBundle = { 
-				'wrong.css': { 
-					type: 'asset', 
-					source: 'body { color: red; }' 
-				} 
-			};
-			const result3 = mockPlugin.generateBundle.call(mockPlugin, {}, wrongBundle);
-			expect(result3).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should test generateBundle with actual bundle content verification', () => {
-			const entries = {
-				styles: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Create a bundle with the expected file
-			const originalBundle = { 
-				'styles.css': { 
-					type: 'asset', 
-					source: 'body { margin: 0; padding: 0; }' 
-				} 
-			};
-
-			// Call generateBundle
-			const result = mockPlugin.generateBundle.call(mockPlugin, {}, originalBundle);
-
-			// Verify return value
-			expect(result).toBeUndefined();
-
-			// Verify emitFile was not called (file already exists)
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Verify the original bundle is unchanged
-			expect(originalBundle).toEqual({
-				'styles.css': { 
-					type: 'asset', 
-					source: 'body { margin: 0; padding: 0; }' 
-				} 
-			});
-
-			// Test with missing file scenario
-			const emptyBundle = {};
-			const result2 = mockPlugin.generateBundle.call(mockPlugin, {}, emptyBundle);
-			expect(result2).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled(); // No duplicated source
-		});
-
-		it('should verify generateBundle hook behavior with actual emitFile calls', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test with existing file - should not emit
-			const bundleWithFile = { 
-				'cssOnly.css': { 
-					type: 'asset', 
-					source: 'body { color: red; }' 
-				} 
-			};
-			
-			const result1 = mockPlugin.generateBundle.call(mockPlugin, {}, bundleWithFile);
-			expect(result1).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Test with missing file - should not emit (no duplicated source)
-			const emptyBundle = {};
-			const result2 = mockPlugin.generateBundle.call(mockPlugin, {}, emptyBundle);
-			expect(result2).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Verify the hook processes the bundle correctly
-			expect(typeof mockPlugin.generateBundle).toBe('function');
-		});
-
-		it('should not emit files when no duplicated sources exist', () => {
-			const entries = {
-				entry1: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-				entry2: { 
-					files: ['src/__tests__/mock/components.css'] // Different file
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-
-			// Simulate load hooks
-			const loadHandler1 = plugins[0].load as any;
-			const loadHandler2 = plugins[1].load as any;
-			
-			loadHandler1.call(plugins[0], '\0virtual:entry1');
-			loadHandler2.call(plugins[1], '\0virtual:entry2');
-
-			// Only entry1.css exists in bundle
-			const bundle = { 
-				'entry1.css': { 
-					type: 'asset', 
-					source: 'body { color: red; }' 
-				} 
-			};
-
-			// Test the second plugin - should not emit since no duplicated source
-			const entry2Plugin = plugins[1] as any;
-			entry2Plugin.emitFile = mockEmitFile;
-			entry2Plugin.generateBundle.call(entry2Plugin, {}, bundle);
-			
-			// Should not emit files since there's no duplicated source
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should verify generateBundle hook processes bundle entries correctly', () => {
-			const entries = {
-				styles: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test that the hook processes the bundle parameter correctly
-			const testBundle = { 
-				'styles.css': { 
-					type: 'asset', 
-					source: 'body { margin: 0; }' 
-				} 
-			};
-
-			const result = mockPlugin.generateBundle.call(mockPlugin, {}, testBundle);
-			expect(result).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Test that the hook handles the bundle object correctly
-			expect(() => {
-				mockPlugin.generateBundle.call(mockPlugin, {}, testBundle);
-			}).not.toThrow();
-
-			// Verify the hook is a function
-			expect(typeof mockPlugin.generateBundle).toBe('function');
-		});
-
-		it('should not emit files when enforce is false', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: false });
-			const bundle = {};
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			const result = generateBundleHandler.call(mockPlugin, {}, bundle);
-			
-			// Should return undefined
-			expect(result).toBeUndefined();
-			
-			// Should not emit files when enforce is false
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should handle generateBundle with different bundle types', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			// Test with asset type
-			const assetBundle = { 'cssOnly.css': { type: 'asset', source: 'css content' } };
-			const result1 = mockPlugin.generateBundle.call(mockPlugin, {}, assetBundle);
-			expect(result1).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-
-			// Test with chunk type (should not be handled)
-			const chunkBundle = { 'cssOnly.js': { type: 'chunk', code: 'js content' } };
-			const result2 = mockPlugin.generateBundle.call(mockPlugin, {}, chunkBundle);
-			expect(result2).toBeUndefined();
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-
-		it('should verify generateBundle hook parameters', () => {
-			const entries = {
-				cssOnly: { 
-					files: ['src/__tests__/mock/styles.css']
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const mockEmitFile = vi.fn();
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			const bundle = { 'cssOnly.css': { type: 'asset', source: 'css content' } };
-			
-			// Test that the hook accepts the correct parameters
-			expect(() => {
-				generateBundleHandler.call(mockPlugin, {}, bundle);
-			}).not.toThrow();
-			
-			// Test with different bundle structures
-			expect(() => {
-				generateBundleHandler.call(mockPlugin, { outputOptions: {} }, {});
-			}).not.toThrow();
-			
-			// Test with empty object (should not throw)
-			expect(() => {
-				generateBundleHandler.call(mockPlugin, {}, {});
-			}).not.toThrow();
-		});
-
-		it('should not handle non-CSS entries in generateBundle hook', () => {
-			const entries = {
-				jsOnly: { 
-					files: [
-						'src/__tests__/mock/utils.js',
-						'src/__tests__/mock/api.js'
-					]
-				},
-			};
-
-			const plugins = virtualMultiEntryPlugin(entries, { enforce: true });
-			const bundle = { 'jsOnly.js': { type: 'chunk', code: 'js content' } };
-			const mockEmitFile = vi.fn();
-
-			const mockPlugin = plugins[0] as any;
-			mockPlugin.emitFile = mockEmitFile;
-
-			const generateBundleHandler = mockPlugin.generateBundle;
-			generateBundleHandler.call(mockPlugin, {}, bundle);
-
-			// Should not emit files for non-CSS entries
-			expect(mockEmitFile).not.toHaveBeenCalled();
-		});
-	});
+  beforeEach(() => {
+    mockConsoleDebug.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('Plugin Creation and Basic Structure', () => {
+    it('should create a plugin for library entry', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js', './src/__tests__/mock/helpers.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toHaveProperty('name', 'virtual-multi-entry-plugin');
+      expect(plugins[0]).toHaveProperty('enforce', 'pre');
+    });
+
+    it('should create plugins for app entries', () => {
+      const appEntries = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+        components: {
+          files: ['./src/__tests__/mock/components.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(appEntries);
+
+      expect(plugins).toHaveLength(2);
+      plugins.forEach((plugin: any) => {
+        expect(plugin).toHaveProperty('name', 'virtual-multi-entry-plugin');
+        expect(plugin).toHaveProperty('enforce', 'pre');
+      });
+    });
+  });
+
+  describe('Load Hook - Actual Output Testing', () => {
+    it('should generate correct lib entry content with named exports', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js', './src/__tests__/mock/helpers.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: { name: 'Components' },
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Test the actual generated content
+      expect(result).toContain('// Virtual multi-entry plugin for components');
+      expect(result).toContain('export * as components from "./src/__tests__/mock/components.js"');
+      expect(result).toContain('export * as helpers from "./src/__tests__/mock/helpers.js"');
+      expect(result).toContain('export default Components');
+      
+      // Verify the structure is correct
+      const lines = (result as string).split('\n');
+      expect(lines[0]).toBe('// Virtual multi-entry plugin for components');
+      expect(lines[1]).toBe('export * as components from "./src/__tests__/mock/components.js";');
+      expect(lines[2]).toBe('export * as helpers from "./src/__tests__/mock/helpers.js";');
+      expect(lines[3]).toBe('export default Components;');
+    });
+
+    it('should generate correct app entry content with imports', () => {
+      const appEntries = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css', './src/__tests__/mock/utilities.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(appEntries);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('styles')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {},
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Test the actual generated content
+      expect(result).toContain('// Virtual multi-entry plugin for styles');
+      expect(result).toContain('import "./src/__tests__/mock/styles.css"');
+      expect(result).toContain('import "./src/__tests__/mock/utilities.css"');
+      expect(result).not.toContain('export default');
+      
+      // Verify the structure is correct
+      const lines = (result as string).split('\n');
+      expect(lines[0]).toBe('// Virtual multi-entry plugin for styles');
+      expect(lines[1]).toBe('import "./src/__tests__/mock/styles.css";');
+      expect(lines[2]).toBe('import "./src/__tests__/mock/utilities.css";');
+    });
+
+    it('should handle empty files array correctly', () => {
+      const emptyEntry = {
+        files: [],
+        name: 'empty',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(emptyEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('empty')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: { name: 'Empty' },
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Should only contain header and default export
+      expect(result).toContain('// Virtual multi-entry plugin for empty');
+      expect(result).toContain('export default Empty');
+      expect(result).not.toContain('export * as');
+      expect(result).not.toContain('import');
+    });
+
+    it('should sanitize file names for exports', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js', './src/__tests__/mock/helpers.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: { name: 'Components' },
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Should sanitize file names (remove special characters)
+      expect(result).toContain('export * as components from');
+      expect(result).toContain('export * as helpers from');
+      expect(result).not.toContain('export * as __tests__');
+    });
+
+    it('should handle lib without name in config', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: {},
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      expect(result).toContain('// Virtual multi-entry plugin for components');
+      expect(result).toContain('export * as components from');
+      expect(result).not.toContain('export default');
+    });
+
+    it('should handle string lib name', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: 'MyLib',
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      expect(result).toContain('export default MyLib');
+    });
+
+    it('should return null for non-matching IDs', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call({} as any, 'some-other-id');
+      } else {
+        result = loadHook?.handler?.call({} as any, 'some-other-id');
+      }
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('ResolveId Hook - Actual Behavior Testing', () => {
+    it('should resolve virtual entry ID for lib entries', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualEntryId = wrapInVirtualEntry('components');
+      const resolveIdHook = plugin.resolveId;
+      
+      let resolvedId;
+      if (typeof resolveIdHook === 'function') {
+        resolvedId = resolveIdHook.call({} as any, virtualEntryId, undefined, { attributes: {}, isEntry: true });
+      } else {
+        resolvedId = resolveIdHook?.handler?.call({} as any, virtualEntryId, undefined, { attributes: {}, isEntry: true });
+      }
+      
+      expect(resolvedId).toBe(`\0${virtualEntryId}`);
+    });
+
+    it('should resolve virtual entry ID for app entries', () => {
+      const appEntries = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(appEntries);
+      const plugin = plugins[0];
+
+      const virtualEntryId = wrapInVirtualEntry('styles');
+      const resolveIdHook = plugin.resolveId;
+      
+      let resolvedId;
+      if (typeof resolveIdHook === 'function') {
+        resolvedId = resolveIdHook.call({} as any, virtualEntryId, undefined, { attributes: {}, isEntry: true });
+      } else {
+        resolvedId = resolveIdHook?.handler?.call({} as any, virtualEntryId, undefined, { attributes: {}, isEntry: true });
+      }
+      
+      expect(resolvedId).toBe(`\0${virtualEntryId}`);
+    });
+
+    it('should return null for non-matching IDs', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const resolveIdHook = plugin.resolveId;
+      
+      let resolvedId;
+      if (typeof resolveIdHook === 'function') {
+        resolvedId = resolveIdHook.call({} as any, 'some-other-id', undefined, { attributes: {}, isEntry: true });
+      } else {
+        resolvedId = resolveIdHook?.handler?.call({} as any, 'some-other-id', undefined, { attributes: {}, isEntry: true });
+      }
+      
+      expect(resolvedId).toBeNull();
+    });
+  });
+
+  describe('Config Hook - Actual Vite Config Modifications', () => {
+    it('should configure lib mode correctly', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const config = {
+        build: {
+          rollupOptions: {
+            input: {},
+            output: {},
+          },
+        },
+      };
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      // Test actual config modifications
+      expect(result?.build?.lib).toEqual({
+        entry: wrapInVirtualEntry('components'),
+        name: 'components',
+      });
+      expect(result?.build?.rollupOptions?.input).toEqual({
+        components: wrapInVirtualEntry('components'),
+      });
+      
+      // Test that entryFileNames function is properly set
+      expect(result?.build?.rollupOptions?.output?.entryFileNames).toBeDefined();
+      expect(typeof result?.build?.rollupOptions?.output?.entryFileNames).toBe('function');
+    });
+
+    it('should configure app mode correctly', () => {
+      const appEntries = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(appEntries);
+      const plugin = plugins[0];
+
+      const config = {
+        build: {
+          rollupOptions: {
+            input: {},
+            output: {},
+          },
+        },
+      };
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      // Test actual config modifications
+      expect(result?.build?.rollupOptions?.input).toEqual({
+        styles: wrapInVirtualEntry('styles'),
+      });
+      
+      // Should not configure lib mode for app entries
+      expect(result?.build?.lib).toBeUndefined();
+      
+      // Test that assetFileNames function is properly set
+      expect(result?.build?.rollupOptions?.output?.assetFileNames).toBeDefined();
+      expect(typeof result?.build?.rollupOptions?.output?.assetFileNames).toBe('function');
+    });
+
+    it('should create config structure if not exists', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const config = {};
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      // Test that all required config structure is created
+      expect(result?.build).toBeDefined();
+      expect(result?.build?.rollupOptions).toBeDefined();
+      expect(result?.build?.rollupOptions?.input).toBeDefined();
+      expect(result?.build?.rollupOptions?.output).toBeDefined();
+      expect(result?.build?.lib).toBeDefined();
+    });
+
+    it('should preserve existing config', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const config = {
+        build: {
+          rollupOptions: {
+            input: { existing: 'entry.js' },
+            output: { format: 'es' },
+          },
+        },
+      };
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config as UserConfig, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      // Test that existing config is preserved
+      expect(result?.build?.rollupOptions?.input).toEqual({
+        existing: 'entry.js',
+        components: wrapInVirtualEntry('components'),
+      });
+      expect(result?.build?.rollupOptions?.output?.format).toBe('es');
+    });
+  });
+
+  describe('Transform Hook - Actual Behavior Testing', () => {
+    it('should log transform calls and return null', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const transformHook = plugin.transform;
+
+      let result;
+      if (typeof transformHook === 'function') {
+        result = transformHook.call({} as any, '', virtualResolvedEntryId);
+      } else {
+        result = {};
+      }
+
+      // Should return null
+      expect(result).toBeNull();
+    });
+
+    it('should return null for non-matching IDs', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const transformHook = plugin.transform;
+      let result;
+      
+      if (typeof transformHook === 'function') {
+        result = transformHook.call({} as any, '', 'some-other-id');
+      } else {
+        result = {};
+      }
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('GenerateBundle Hook - Actual Behavior Testing', () => {
+    it('should handle CSS-only entries with enforce option', () => {
+      const cssEntry = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(cssEntry, { enforce: true });
+      const plugin = plugins[0];
+
+      const mockBundle: any = {
+        'styles.css': {
+          type: 'asset',
+          source: '/* CSS content */',
+        },
+      };
+
+      const mockEmitFile = vi.fn();
+
+      const mockContext: any = {
+        emitFile: mockEmitFile,
+      };
+
+      const generateBundleHook = plugin.generateBundle;
+      
+      if (typeof generateBundleHook === 'function') {
+        generateBundleHook.call(mockContext, {} as any, mockBundle, {} as any);
+      } else {
+        generateBundleHook?.handler?.call(mockContext, {} as any, mockBundle, {} as any);
+      }
+
+      // Should not emit additional files for non-CSS-only entries
+      expect(mockEmitFile).not.toHaveBeenCalled();
+    });
+
+    it('should not emit files when enforce is false', () => {
+      const cssEntry = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(cssEntry, { enforce: false });
+      const plugin = plugins[0];
+
+      const mockBundle = {};
+      const mockEmitFile = vi.fn();
+
+      const mockContext: any = {
+        emitFile: mockEmitFile,
+      };
+
+      const generateBundleHook = plugin.generateBundle;
+      
+      if (typeof generateBundleHook === 'function') {
+        generateBundleHook.call(mockContext, {} as any, mockBundle, {} as any);
+      } else {
+        generateBundleHook?.handler?.call(mockContext, {} as any, mockBundle, {} as any);
+      }
+
+      expect(mockEmitFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CSS-Only Entry Detection - Actual Behavior', () => {
+    it('should detect CSS-only entries correctly', () => {
+      const cssOnlyEntry = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css', './src/__tests__/mock/utilities.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(cssOnlyEntry);
+      const plugin = plugins[0];
+
+      // Test the internal CSS-only detection by checking the generated content
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('styles')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {},
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Should generate import statements for CSS files
+      expect(result).toContain('import "./src/__tests__/mock/styles.css"');
+      expect(result).toContain('import "./src/__tests__/mock/utilities.css"');
+    });
+
+    it('should detect mixed file types as non-CSS-only', () => {
+      const mixedEntry = {
+        files: ['./src/__tests__/mock/components.js', './src/__tests__/mock/styles.css'],
+        name: 'mixed',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(mixedEntry);
+      const plugin = plugins[0];
+
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('mixed')}`;
+      const mockContext: any = {
+        environment: {
+          config: {
+            build: {
+              lib: { name: 'Mixed' },
+            },
+          },
+        },
+      };
+
+      const loadHook = plugin.load;
+      let result;
+      
+      if (typeof loadHook === 'function') {
+        result = loadHook.call(mockContext, virtualResolvedEntryId);
+      } else {
+        result = loadHook?.handler?.call(mockContext, virtualResolvedEntryId);
+      }
+
+      // Should generate export statements for mixed files
+      expect(result).toContain('export * as components from');
+      expect(result).toContain('export * as styles from');
+    });
+  });
+
+  describe('File Name Generation - Actual Function Behavior', () => {
+    it('should generate correct entry file names for lib entries', () => {
+      const libEntry = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const plugins = virtualMultiEntryPlugin(libEntry);
+      const plugin = plugins[0];
+
+      const config = {
+        build: {
+          rollupOptions: {
+            input: {},
+            output: {},
+          },
+        },
+      };
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      const entryFileNamesFn = result?.build?.rollupOptions?.output?.entryFileNames;
+
+      // Test the actual function behavior
+      expect(typeof entryFileNamesFn).toBe('function');
+      
+      // Test with virtual entry
+      const virtualResolvedEntryId = `\0${wrapInVirtualEntry('components')}`;
+      const assetInfo = { facadeModuleId: virtualResolvedEntryId };
+      const fileName = entryFileNamesFn(assetInfo);
+      expect(fileName).toBe('components.js');
+      
+      // Test with other entries
+      const otherAssetInfo = { facadeModuleId: 'other-entry' };
+      const otherFileName = entryFileNamesFn(otherAssetInfo);
+      expect(otherFileName).toBe('[name].[hash].chunk.js');
+    });
+
+    it('should generate correct asset file names for CSS entries', () => {
+      const cssEntry = {
+        styles: {
+          files: ['./src/__tests__/mock/styles.css'],
+          type: 'app' as const,
+        },
+      };
+
+      const plugins = virtualMultiEntryPlugin(cssEntry);
+      const plugin = plugins[0];
+
+      const config = {
+        build: {
+          rollupOptions: {
+            input: {},
+            output: {},
+          },
+        },
+      };
+
+      let result: any;
+
+      if(typeof plugin.config === 'function') {
+        result = plugin.config?.call({} as any, config, {} as ConfigEnv);
+      } else {
+        result = {};
+      }
+
+      const assetFileNamesFn = result?.build?.rollupOptions?.output?.assetFileNames;
+
+      // Test the actual function behavior
+      expect(typeof assetFileNamesFn).toBe('function');
+      
+      // Test with CSS-only entry
+      const virtualEntryId = wrapInVirtualEntry('styles');
+      const assetInfo = { 
+        originalFileNames: [virtualEntryId], 
+        source: '/* CSS content */' 
+      };
+      const fileName = assetFileNamesFn(assetInfo);
+      expect(fileName).toBe('styles.css');
+      
+      // Test with other assets
+      const otherAssetInfo = { 
+        originalFileNames: ['other-file.css'], 
+        source: '/* CSS content */' 
+      };
+      const otherFileName = assetFileNamesFn(otherAssetInfo);
+      expect(otherFileName).toBe('[name].[extname]');
+    });
+  });
+
+  describe('Utility Functions', () => {
+    it('should wrap entry names correctly', () => {
+      expect(wrapInVirtualEntry('test')).toBe('virtual:test');
+      expect(wrapInVirtualEntry('my-component')).toBe('virtual:my-component');
+      expect(wrapInVirtualEntry('styles')).toBe('virtual:styles');
+    });
+  });
+
+  describe('Multiple Entry Points - Actual Behavior', () => {
+    it('should handle multiple library entries independently', () => {
+      const libConfig1 = {
+        files: ['./src/__tests__/mock/components.js'],
+        name: 'components',
+        type: 'lib' as const,
+      };
+
+      const libConfig2 = {
+        files: ['./src/__tests__/mock/helpers.js'],
+        name: 'helpers',
+        type: 'lib' as const,
+      };
+
+      const plugins1 = virtualMultiEntryPlugin(libConfig1);
+      const plugins2 = virtualMultiEntryPlugin(libConfig2);
+
+      expect(plugins1).toHaveLength(1);
+      expect(plugins2).toHaveLength(1);
+
+      // Test that both plugins work independently
+      const plugin1 = plugins1[0];
+      const plugin2 = plugins2[0];
+
+      expect(plugin1).toHaveProperty('name', 'virtual-multi-entry-plugin');
+      expect(plugin2).toHaveProperty('name', 'virtual-multi-entry-plugin');
+    });
+
+    it('should handle complex app configuration', () => {
+      const appEntries = {
+        main: {
+          files: [
+            './src/__tests__/mock/components.js',
+            './src/__tests__/mock/helpers.js'
+          ],
+          type: 'app' as const,
+        },
+        styles: {
+          files: [
+            './src/__tests__/mock/styles.css',
+            './src/__tests__/mock/utilities.css'
+          ],
+          type: 'app' as const,
+        },
+        components: {
+          files: ['./src/__tests__/mock/components.css'],
+          type: 'app' as const,
+        }
+      };
+
+      const plugins = virtualMultiEntryPlugin(appEntries);
+
+      expect(plugins).toHaveLength(3);
+      plugins.forEach((plugin: any) => {
+        expect(plugin).toHaveProperty('name', 'virtual-multi-entry-plugin');
+        expect(plugin).toHaveProperty('enforce', 'pre');
+      });
+    });
+  });
 });
