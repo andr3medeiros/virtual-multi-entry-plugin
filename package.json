@@ -1,6 +1,6 @@
 {
   "name": "virtual-multi-entry-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Vite plugin that enables multiple virtual entry points for your build process",
   "keywords": [
     "vite",
